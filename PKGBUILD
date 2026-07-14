@@ -1,6 +1,6 @@
 # Maintainer: Ulises Jeremias <ulisescf.24@gmail.com>
 pkgname=create-awesome-node-app
-pkgver=0.11.3
+pkgver=0.12.0
 pkgrel=1
 pkgdesc="Composable scaffolding CLI — one command, any Node.js stack"
 arch=('any')
@@ -8,7 +8,7 @@ url="https://create-awesome-node-app.vercel.app"
 license=('MIT')
 depends=('nodejs>=22' 'npm')
 source=("https://registry.npmjs.org/$pkgname/-/$pkgname-$pkgver.tgz")
-sha256sums=('f656f918cee8d4095c5d17b264113d17498cf594bab1f20b2890a3421e738d6c')
+sha256sums=('06ba6e6a891af44b672d3541b25489394d5a43c482b59bc58015cdf6c86f8292')
 
 package() {
   npm install -g --prefix "$pkgdir/usr" "$srcdir/$pkgname-$pkgver.tgz"
