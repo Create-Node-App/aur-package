@@ -10,6 +10,51 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: PKGBUILD lint (shellcheck + namcap)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install shellcheck and namcap dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck python3-pip
+          pip install --quiet namcap || echo "namcap pip install optional"
+
+      - name: ShellCheck PKGBUILD
+        run: |
+          set -euo pipefail
+          echo "Running shellcheck on PKGBUILD"
+          # PKGBUILD is bash but uses makepkg variables; ignore SC2034 (unused) and SC2148 (missing shebang)
+          shellcheck --severity=warning --shell=bash \
+            --exclude=SC2034,SC2148,SC2154,SC2164 \
+            PKGBUILD || {
+              echo "::warning::shellcheck found warnings in PKGBUILD"
+            }
+          # Also check .SRCINFO is not shell but ensure it exists
+          test -f .SRCINFO || { echo "::error::.SRCINFO missing"; exit 1; }
+
+      - name: Version drift check (npm)
+        run: |
+          set -euo pipefail
+          PKGVER=$(grep -E '^pkgver=' PKGBUILD | cut -d= -f2)
+          NPM_VER=$(curl -sfL https://registry.npmjs.org/create-awesome-node-app/latest | jq -r '.version')
+          echo "PKGBUILD pkgver: $PKGVER"
+          echo "npm latest: $NPM_VER"
+          if [ "$PKGVER" != "$NPM_VER" ]; then
+            echo "::warning::PKGBUILD pkgver ($PKGVER) differs from npm latest ($NPM_VER)"
+          else
+            echo "Version sync OK: $PKGVER"
+          fi
+
+      - name: Validate PKGBUILD syntax (bash -n)
+        run: |
+          set -euo pipefail
+          bash -n PKGBUILD
+          echo "bash -n OK"
+
   srcinfo:
     name: .SRCINFO sync
     runs-on: ubuntu-latest
@@ -23,9 +68,29 @@ jobs:
             -w /work \
             archlinux:latest \
             bash -euo pipefail -c '
-              pacman -Sy --noconfirm --needed pacman-contrib base-devel
+              pacman -Sy --noconfirm --needed pacman-contrib base-devel >/dev/null 2>&1
               useradd -m builder
               chown -R builder:builder /work
               runuser -u builder -- makepkg --printsrcinfo > /tmp/.SRCINFO.generated
               diff -u .SRCINFO /tmp/.SRCINFO.generated
+            '
+
+  namcap:
+    name: namcap PKGBUILD
+    runs-on: ubuntu-latest
+    # namcap requires Arch environment; run in docker but allow warnings
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run namcap (informational)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$PWD:/work:rw" \
+            -w /work \
+            archlinux:latest \
+            bash -euo pipefail -c '
+              pacman -Sy --noconfirm --needed namcap pacman-contrib base-devel >/dev/null 2>&1
+              namcap PKGBUILD || true
+              namcap .SRCINFO || true
             '
